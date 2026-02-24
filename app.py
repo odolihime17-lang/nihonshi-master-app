@@ -26,24 +26,29 @@ init_db()
 # Cookie-based user identification
 # ---------------------------------------------------------------------------
 
-try:
-    user_id = st.context.cookies.get("nihonshi_user_id", "")
-except Exception:
-    user_id = ""
-
-if not user_id:
-    user_id = str(uuid.uuid4())
+if "user_id" not in st.session_state:
+    # Try reading from cookie first (persists across browser sessions)
+    _cookie_uid = ""
     try:
-        st_html(f"""
-            <script>
-            window.parent.document.cookie = "nihonshi_user_id={user_id}; path=/; max-age=31536000; SameSite=Lax";
-            </script>
-        """, height=0)
+        _cookie_uid = st.context.cookies.get("nihonshi_user_id", "")
     except Exception:
         pass
 
-if not user_id:
-    user_id = "anonymous"
+    if _cookie_uid:
+        st.session_state.user_id = _cookie_uid
+    else:
+        # Generate a new ID and try to save it as a cookie for next time
+        st.session_state.user_id = str(uuid.uuid4())
+        try:
+            st_html(f"""
+                <script>
+                window.parent.document.cookie = "nihonshi_user_id={st.session_state.user_id}; path=/; max-age=31536000; SameSite=Lax";
+                </script>
+            """, height=0)
+        except Exception:
+            pass
+
+user_id = st.session_state.user_id
 
 # ---------------------------------------------------------------------------
 # Custom CSS
