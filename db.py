@@ -1,49 +1,54 @@
 """
-db.py — SQLite database module for quiz history persistence.
+db.py — Supabase database module for quiz history & PDF persistence.
 Supports per-user data isolation via user_id.
 """
 
 from __future__ import annotations
 
-import sqlite3
 import os
 from datetime import datetime
 
-DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "history_quiz.db")
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
-def _get_connection() -> sqlite3.Connection:
-    """Get a database connection with row factory enabled."""
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+def _get_supabase_config() -> tuple[str, str]:
+    """Get Supabase URL and Key from Streamlit secrets or environment."""
+    try:
+        import streamlit as st
+        url = st.secrets.get("SUPABASE_URL", "")
+        key = st.secrets.get("SUPABASE_KEY", "")
+        if url and key:
+            return url, key
+    except Exception:
+        pass
+
+    url = os.environ.get("SUPABASE_URL", "")
+    key = os.environ.get("SUPABASE_KEY", "")
+    return url, key
+
+
+def _get_client():
+    """Return a Supabase client instance."""
+    from supabase import create_client
+    url, key = _get_supabase_config()
+    if not url or not key:
+        raise RuntimeError(
+            "SUPABASE_URL と SUPABASE_KEY が設定されていません。\n"
+            ".env ファイルまたは Streamlit Secrets に設定してください。"
+        )
+    return create_client(url, key)
 
 
 def init_db() -> None:
-    """Create the quiz_results table if it does not exist."""
-    conn = _get_connection()
+    """Verify Supabase connection is working."""
     try:
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS quiz_results (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                question_text TEXT NOT NULL,
-                user_answer TEXT NOT NULL,
-                correct_answer TEXT NOT NULL,
-                is_correct INTEGER NOT NULL,
-                era TEXT NOT NULL,
-                field TEXT NOT NULL,
-                created_at TEXT NOT NULL,
-                user_id TEXT NOT NULL DEFAULT 'anonymous'
-            )
-        """)
-        # Add user_id column to existing tables that don't have it
-        try:
-            conn.execute("ALTER TABLE quiz_results ADD COLUMN user_id TEXT NOT NULL DEFAULT 'anonymous'")
-        except sqlite3.OperationalError:
-            pass  # Column already exists
-        conn.commit()
-    finally:
-        conn.close()
+        client = _get_client()
+        # Simple connection test — try to select from quiz_results
+        client.table("quiz_results").select("id").limit(1).execute()
+    except Exception as e:
+        print(f"[db.py] Supabase connection warning: {e}")
 
 
 def save_result(
@@ -55,29 +60,21 @@ def save_result(
     field: str,
     user_id: str = "anonymous",
 ) -> None:
-    """Save a single quiz result to the database."""
-    conn = _get_connection()
+    """Save a single quiz result to Supabase."""
     try:
-        conn.execute(
-            """
-            INSERT INTO quiz_results
-                (question_text, user_answer, correct_answer, is_correct, era, field, created_at, user_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                question,
-                user_answer,
-                correct_answer,
-                1 if is_correct else 0,
-                era,
-                field,
-                datetime.now().isoformat(),
-                user_id,
-            ),
-        )
-        conn.commit()
-    finally:
-        conn.close()
+        client = _get_client()
+        client.table("quiz_results").insert({
+            "user_id": user_id,
+            "question_text": question,
+            "user_answer": user_answer,
+            "correct_answer": correct_answer,
+            "is_correct": is_correct,
+            "era": era,
+            "field": field,
+            "created_at": datetime.now().isoformat(),
+        }).execute()
+    except Exception as e:
+        print(f"[db.py] save_result error: {e}")
 
 
 def get_weak_areas(limit: int = 5, user_id: str = "anonymous") -> list[dict]:
@@ -85,48 +82,61 @@ def get_weak_areas(limit: int = 5, user_id: str = "anonymous") -> list[dict]:
     Return the (era, field) pairs with the highest error rates.
     Only considers pairs with at least 2 attempts.
     """
-    conn = _get_connection()
     try:
-        rows = conn.execute(
-            """
-            SELECT era, field,
-                   COUNT(*) AS total,
-                   SUM(CASE WHEN is_correct = 0 THEN 1 ELSE 0 END) AS wrong,
-                   ROUND(
-                       CAST(SUM(CASE WHEN is_correct = 0 THEN 1 ELSE 0 END) AS REAL)
-                       / COUNT(*) * 100, 1
-                   ) AS error_rate
-            FROM quiz_results
-            WHERE user_id = ?
-            GROUP BY era, field
-            HAVING total >= 2
-            ORDER BY error_rate DESC
-            LIMIT ?
-            """,
-            (user_id, limit),
-        ).fetchall()
-        return [dict(r) for r in rows]
-    finally:
-        conn.close()
+        client = _get_client()
+        resp = client.table("quiz_results").select(
+            "era, field, is_correct"
+        ).eq("user_id", user_id).execute()
+
+        rows = resp.data
+        if not rows:
+            return []
+
+        # Aggregate in Python
+        from collections import defaultdict
+        stats: dict[tuple, dict] = defaultdict(lambda: {"total": 0, "wrong": 0})
+        for r in rows:
+            key = (r["era"], r["field"])
+            stats[key]["total"] += 1
+            if not r["is_correct"]:
+                stats[key]["wrong"] += 1
+
+        result = []
+        for (era, field), s in stats.items():
+            if s["total"] >= 2:
+                error_rate = round(s["wrong"] / s["total"] * 100, 1)
+                result.append({
+                    "era": era,
+                    "field": field,
+                    "total": s["total"],
+                    "wrong": s["wrong"],
+                    "error_rate": error_rate,
+                })
+
+        result.sort(key=lambda x: x["error_rate"], reverse=True)
+        return result[:limit]
+    except Exception as e:
+        print(f"[db.py] get_weak_areas error: {e}")
+        return []
 
 
 def get_recent_wrong_questions(limit: int = 20, user_id: str = "anonymous") -> list[str]:
-    """Return recent incorrectly-answered question texts for prompt injection."""
-    conn = _get_connection()
+    """Return recent incorrectly-answered question texts."""
     try:
-        rows = conn.execute(
-            """
-            SELECT DISTINCT question_text
-            FROM quiz_results
-            WHERE is_correct = 0 AND user_id = ?
-            ORDER BY created_at DESC
-            LIMIT ?
-            """,
-            (user_id, limit),
-        ).fetchall()
-        return [r["question_text"] for r in rows]
-    finally:
-        conn.close()
+        client = _get_client()
+        resp = (
+            client.table("quiz_results")
+            .select("question_text")
+            .eq("user_id", user_id)
+            .eq("is_correct", False)
+            .order("created_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        return list({r["question_text"] for r in resp.data})
+    except Exception as e:
+        print(f"[db.py] get_recent_wrong_questions error: {e}")
+        return []
 
 
 def get_stats(user_id: str = "anonymous") -> dict:
@@ -140,63 +150,61 @@ def get_stats(user_id: str = "anonymous") -> dict:
         "by_field": [...]
     }
     """
-    conn = _get_connection()
+    empty = {"total": 0, "correct": 0, "accuracy": 0.0, "by_era": [], "by_field": []}
     try:
-        # Overall
-        row = conn.execute(
-            """
-            SELECT COUNT(*) AS total,
-                   SUM(CASE WHEN is_correct = 1 THEN 1 ELSE 0 END) AS correct
-            FROM quiz_results
-            WHERE user_id = ?
-            """,
-            (user_id,),
-        ).fetchone()
-        total = row["total"]
-        correct = row["correct"] or 0
+        client = _get_client()
+        resp = client.table("quiz_results").select(
+            "is_correct, era, field"
+        ).eq("user_id", user_id).execute()
+
+        rows = resp.data
+        if not rows:
+            return empty
+
+        total = len(rows)
+        correct = sum(1 for r in rows if r["is_correct"])
         accuracy = round(correct / total * 100, 1) if total > 0 else 0.0
 
         # By era
-        by_era = [
-            dict(r)
-            for r in conn.execute(
-                """
-                SELECT era,
-                       COUNT(*) AS total,
-                       SUM(CASE WHEN is_correct = 1 THEN 1 ELSE 0 END) AS correct,
-                       ROUND(
-                           CAST(SUM(CASE WHEN is_correct = 1 THEN 1 ELSE 0 END) AS REAL)
-                           / COUNT(*) * 100, 1
-                       ) AS accuracy
-                FROM quiz_results
-                WHERE user_id = ?
-                GROUP BY era
-                ORDER BY total DESC
-                """,
-                (user_id,),
-            ).fetchall()
-        ]
+        from collections import defaultdict
+        era_stats: dict[str, dict] = defaultdict(lambda: {"total": 0, "correct": 0})
+        field_stats: dict[str, dict] = defaultdict(lambda: {"total": 0, "correct": 0})
 
-        # By field
-        by_field = [
-            dict(r)
-            for r in conn.execute(
-                """
-                SELECT field,
-                       COUNT(*) AS total,
-                       SUM(CASE WHEN is_correct = 1 THEN 1 ELSE 0 END) AS correct,
-                       ROUND(
-                           CAST(SUM(CASE WHEN is_correct = 1 THEN 1 ELSE 0 END) AS REAL)
-                           / COUNT(*) * 100, 1
-                       ) AS accuracy
-                FROM quiz_results
-                WHERE user_id = ?
-                GROUP BY field
-                ORDER BY total DESC
-                """,
-                (user_id,),
-            ).fetchall()
-        ]
+        for r in rows:
+            era_stats[r["era"]]["total"] += 1
+            if r["is_correct"]:
+                era_stats[r["era"]]["correct"] += 1
+            field_stats[r["field"]]["total"] += 1
+            if r["is_correct"]:
+                field_stats[r["field"]]["correct"] += 1
+
+        by_era = sorted(
+            [
+                {
+                    "era": era,
+                    "total": s["total"],
+                    "correct": s["correct"],
+                    "accuracy": round(s["correct"] / s["total"] * 100, 1),
+                }
+                for era, s in era_stats.items()
+            ],
+            key=lambda x: x["total"],
+            reverse=True,
+        )
+
+        by_field = sorted(
+            [
+                {
+                    "field": field,
+                    "total": s["total"],
+                    "correct": s["correct"],
+                    "accuracy": round(s["correct"] / s["total"] * 100, 1),
+                }
+                for field, s in field_stats.items()
+            ],
+            key=lambda x: x["total"],
+            reverse=True,
+        )
 
         return {
             "total": total,
@@ -205,5 +213,71 @@ def get_stats(user_id: str = "anonymous") -> dict:
             "by_era": by_era,
             "by_field": by_field,
         }
-    finally:
-        conn.close()
+    except Exception as e:
+        print(f"[db.py] get_stats error: {e}")
+        return empty
+
+
+# ---------------------------------------------------------------------------
+# PDF persistence
+# ---------------------------------------------------------------------------
+
+
+def save_pdf(user_id: str, file_name: str, pdf_text: str) -> None:
+    """Save PDF text to Supabase."""
+    try:
+        client = _get_client()
+        client.table("saved_pdfs").insert({
+            "user_id": user_id,
+            "file_name": file_name,
+            "pdf_text": pdf_text,
+            "char_count": len(pdf_text),
+            "created_at": datetime.now().isoformat(),
+        }).execute()
+    except Exception as e:
+        print(f"[db.py] save_pdf error: {e}")
+
+
+def get_saved_pdfs(user_id: str = "anonymous") -> list[dict]:
+    """Return list of saved PDFs (id, file_name, char_count, created_at)."""
+    try:
+        client = _get_client()
+        resp = (
+            client.table("saved_pdfs")
+            .select("id, file_name, char_count, created_at")
+            .eq("user_id", user_id)
+            .order("created_at", desc=True)
+            .execute()
+        )
+        return resp.data
+    except Exception as e:
+        print(f"[db.py] get_saved_pdfs error: {e}")
+        return []
+
+
+def delete_saved_pdf(pdf_id: int) -> None:
+    """Delete a saved PDF by ID."""
+    try:
+        client = _get_client()
+        client.table("saved_pdfs").delete().eq("id", pdf_id).execute()
+    except Exception as e:
+        print(f"[db.py] delete_saved_pdf error: {e}")
+
+
+def get_pdf_text(pdf_id: int) -> str:
+    """Get the full text of a saved PDF by ID."""
+    try:
+        client = _get_client()
+        resp = (
+            client.table("saved_pdfs")
+            .select("pdf_text")
+            .eq("id", pdf_id)
+            .limit(1)
+            .execute()
+        )
+        if resp.data:
+            return resp.data[0]["pdf_text"]
+        return ""
+    except Exception as e:
+        print(f"[db.py] get_pdf_text error: {e}")
+        return ""

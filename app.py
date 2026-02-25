@@ -5,7 +5,8 @@ app.py — 日本史学習Webアプリ (Streamlit)
 import uuid
 import streamlit as st
 from streamlit.components.v1 import html as st_html
-from db import init_db, save_result, get_weak_areas, get_recent_wrong_questions, get_stats
+from db import (init_db, save_result, get_weak_areas, get_recent_wrong_questions,
+                get_stats, save_pdf, get_saved_pdfs, delete_saved_pdf, get_pdf_text)
 from pdf_utils import extract_text_from_pdf, extract_text_from_drive_url
 from quiz_generator import generate_quiz, prefetch_quiz_async
 
@@ -485,6 +486,7 @@ with st.sidebar:
                         with st.spinner(f"📖 {fname} を読み込み中... ({file_size_mb:.1f}MB)"):
                             text = extract_text_from_pdf(uploaded_pdf)
                             st.session_state.pdf_texts[fname] = text
+                            save_pdf(user_id=user_id, file_name=fname, pdf_text=text)
                         st.success(f"✅ {fname}: {len(text):,} 文字を抽出")
     else:
         drive_url = st.text_input(
@@ -502,6 +504,7 @@ with st.sidebar:
                         try:
                             text = extract_text_from_drive_url(drive_url)
                             st.session_state.pdf_texts[url_label] = text
+                            save_pdf(user_id=user_id, file_name=url_label, pdf_text=text)
                             st.success(f"✅ {url_label}: {len(text):,} 文字を抽出")
                         except (ValueError, RuntimeError) as e:
                             st.error(f"❌ {e}")
@@ -529,6 +532,33 @@ with st.sidebar:
         if st.button("🗑️ 全てクリア", use_container_width=True):
             st.session_state.pdf_texts = {}
             st.rerun()
+
+    # Show saved PDFs from Supabase
+    saved_pdfs = get_saved_pdfs(user_id=user_id)
+    if saved_pdfs:
+        st.markdown("---")
+        st.markdown(f"**📁 保存済みPDF（{len(saved_pdfs)}件）**")
+        st.caption("前回のセッションで保存されたPDFを読み込めます")
+
+        for sp in saved_pdfs:
+            # Skip if already loaded in current session
+            if sp["file_name"] in st.session_state.pdf_texts:
+                continue
+            col_load, col_del = st.columns([4, 1])
+            with col_load:
+                if st.button(
+                    f"📄 {sp['file_name']} ({sp['char_count']:,}字)",
+                    key=f"load_sp_{sp['id']}",
+                    use_container_width=True,
+                ):
+                    text = get_pdf_text(sp["id"])
+                    if text:
+                        st.session_state.pdf_texts[sp["file_name"]] = text
+                        st.rerun()
+            with col_del:
+                if st.button("🗑", key=f"del_sp_{sp['id']}", help=f"{sp['file_name']} を削除"):
+                    delete_saved_pdf(sp["id"])
+                    st.rerun()
 
     st.markdown("---")
 
@@ -706,20 +736,33 @@ elif st.session_state.questions and not st.session_state.quiz_finished:
     total = len(questions)
     q = questions[idx]
 
-    # Progress bar
+    # Progress bar + quit button
     progress_pct = int((idx / total) * 100)
-    st.markdown(
-        f"""
-        <div style="display:flex; justify-content:space-between; color:#94a3b8; font-size:0.85rem; margin-bottom:0.25rem;">
-            <span>問題 {idx + 1} / {total}</span>
-            <span>スコア: {st.session_state.score} / {idx if st.session_state.answered else idx}</span>
-        </div>
-        <div class="progress-container">
-            <div class="progress-fill" style="width:{progress_pct}%;"></div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+
+    prog_col, quit_col = st.columns([5, 1])
+    with prog_col:
+        st.markdown(
+            f"""
+            <div style="display:flex; justify-content:space-between; color:#94a3b8; font-size:0.85rem; margin-bottom:0.25rem;">
+                <span>問題 {idx + 1} / {total}</span>
+                <span>スコア: {st.session_state.score} / {idx if st.session_state.answered else idx}</span>
+            </div>
+            <div class="progress-container">
+                <div class="progress-fill" style="width:{progress_pct}%;"></div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    with quit_col:
+        if st.button("🏠 やめる", key="quit_quiz", use_container_width=True):
+            st.session_state.questions = []
+            st.session_state.current_index = 0
+            st.session_state.score = 0
+            st.session_state.answered = False
+            st.session_state.selected_choice = None
+            st.session_state.quiz_finished = False
+            st.session_state.user_answers = []
+            st.rerun()
 
     # Question card
     st.markdown(
@@ -1009,3 +1052,15 @@ elif st.session_state.quiz_finished:
                         st.error(f"❌ 問題生成に失敗しました: {e}")
             else:
                 st.info("まだ苦手分野のデータがありません。もう少し問題を解いてみましょう！")
+
+    # Home button
+    st.markdown("")
+    if st.button("🏠 ホームに戻る", use_container_width=True, key="go_home"):
+        st.session_state.questions = []
+        st.session_state.current_index = 0
+        st.session_state.score = 0
+        st.session_state.answered = False
+        st.session_state.selected_choice = None
+        st.session_state.quiz_finished = False
+        st.session_state.user_answers = []
+        st.rerun()
