@@ -224,9 +224,20 @@ def get_stats(user_id: str = "anonymous") -> dict:
 
 
 def save_pdf(user_id: str, file_name: str, pdf_text: str) -> None:
-    """Save PDF text to Supabase."""
+    """Save PDF text to Supabase. Skips if same file_name already exists."""
     try:
         client = _get_client()
+        # Check if already saved
+        existing = (
+            client.table("saved_pdfs")
+            .select("id")
+            .eq("user_id", user_id)
+            .eq("file_name", file_name)
+            .limit(1)
+            .execute()
+        )
+        if existing.data:
+            return  # Already saved, skip
         client.table("saved_pdfs").insert({
             "user_id": user_id,
             "file_name": file_name,
