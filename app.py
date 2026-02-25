@@ -26,30 +26,14 @@ init_db()
 # ---------------------------------------------------------------------------
 # Cookie-based user identification
 # ---------------------------------------------------------------------------
+# User identification
+# ---------------------------------------------------------------------------
+# Fixed user_id for data persistence.
+# Cookie-based identification is unreliable in Streamlit (iframe cross-origin
+# issues cause a new UUID to be generated on every reload, fragmenting data).
+# Using a fixed ID ensures all learning data accumulates correctly.
 
-if "user_id" not in st.session_state:
-    # Try reading from cookie first (persists across browser sessions)
-    _cookie_uid = ""
-    try:
-        _cookie_uid = st.context.cookies.get("nihonshi_user_id", "")
-    except Exception:
-        pass
-
-    if _cookie_uid:
-        st.session_state.user_id = _cookie_uid
-    else:
-        # Generate a new ID and try to save it as a cookie for next time
-        st.session_state.user_id = str(uuid.uuid4())
-        try:
-            st_html(f"""
-                <script>
-                window.parent.document.cookie = "nihonshi_user_id={st.session_state.user_id}; path=/; max-age=31536000; SameSite=Lax";
-                </script>
-            """, height=0)
-        except Exception:
-            pass
-
-user_id = st.session_state.user_id
+user_id = "takumi"
 
 # ---------------------------------------------------------------------------
 # Custom CSS
