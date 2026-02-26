@@ -564,6 +564,7 @@ with st.sidebar:
     selected_field = st.selectbox("📚 分野を選択", FIELDS, index=0)
     custom_field = st.text_input("または自由入力（分野）", placeholder="例: 建築史")
 
+    era = custom_era if custom_era else selected_era
     field = custom_field if custom_field else selected_field
 
     st.markdown("---")
@@ -964,8 +965,13 @@ elif st.session_state.quiz_finished:
         for idx in indices:
             q = questions_list[idx]
             user_ans = answers_list[idx] if idx < len(answers_list) else -1
-            correct_idx = q["answer_index"]
-            is_correct = user_ans == correct_idx
+            
+            if "answer_index" in q:
+                correct_idx = q["answer_index"]
+                is_correct = user_ans == correct_idx
+            else:
+                correct_answer = q.get("answer", "")
+                is_correct = str(user_ans).strip() == str(correct_answer).strip()
 
             # Status badge
             if is_correct:
@@ -1040,7 +1046,17 @@ elif st.session_state.quiz_finished:
             )
 
     all_indices = list(range(total))
-    wrong_indices = [i for i in all_indices if i < len(user_answers) and user_answers[i] != st.session_state.questions[i]["answer_index"]]
+    
+    def _is_wrong(idx):
+        if idx >= len(user_answers): return False
+        q = st.session_state.questions[idx]
+        u = user_answers[idx]
+        if "answer_index" in q:
+            return u != q["answer_index"]
+        else:
+            return str(u).strip() != q.get("answer", "").strip()
+
+    wrong_indices = [i for i in all_indices if _is_wrong(i)]
 
     if tab_wrong is not None:
         with tab_all:
