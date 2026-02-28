@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from backend.api import quiz, pdf, stats
-from backend.core import db
+from api import quiz, pdf, stats
+from core import db
 
 app = FastAPI(
     title="日本史マスター API",

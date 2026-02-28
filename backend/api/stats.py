@@ -1,6 +1,6 @@
 from fastapi import APIRouter
-from backend.models.schemas import UserStats, WeakArea
-from backend.core import db
+from models.schemas import UserStats, WeakArea
+from core import db
 from typing import List
 
 router = APIRouter(prefix="/stats", tags=["stats"])

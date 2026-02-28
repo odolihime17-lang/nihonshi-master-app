@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException
-from backend.models.schemas import QuizRequest, QuizSubmit, QuizQuestion
-from backend.core import db, quiz_generator
+from models.schemas import QuizRequest, QuizSubmit, QuizQuestion
+from core import db, quiz_generator
 from typing import List
 
 router = APIRouter(prefix="/quiz", tags=["quiz"])

@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, UploadFile, File
-from backend.models.schemas import PDFInfo, DriveUploadRequest
-from backend.core import db, pdf_utils
+from models.schemas import PDFInfo, DriveUploadRequest
+from core import db, pdf_utils
 from typing import List
 
 router = APIRouter(prefix="/pdf", tags=["pdf"])
