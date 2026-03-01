@@ -43,7 +43,10 @@ export default function Settings() {
             fetchPdfs();
         } catch (err: any) {
             console.error('Upload error details:', err);
-            const msg = err.response?.data?.detail || err.message || 'Unknown error';
+            let msg = err.response?.data?.detail || err.message || 'Unknown error';
+            if (typeof msg !== 'string') {
+                msg = JSON.stringify(msg);
+            }
             alert(`Upload failed: ${msg}`);
         } finally {
             setUploading(false);
