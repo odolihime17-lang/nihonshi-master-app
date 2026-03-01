@@ -5,8 +5,8 @@ class QuizQuestion(BaseModel):
     question: Optional[str] = None
     statement_a: Optional[str] = None
     statement_b: Optional[str] = None
-    choices: List[str]
-    answer_index: int
+    choices: Optional[List[str]] = None
+    answer_index: Optional[int] = None
     explanation: str
     era: str
     field: str
