@@ -17,6 +17,7 @@ export default function Settings() {
     const { userId, isLoading: userLoading } = useUser();
 
     useEffect(() => {
+        console.log('DEBUG: Settings Page Version: 4');
         setMounted(true);
         if (userId) fetchPdfs();
     }, [userId]);
@@ -42,12 +43,25 @@ export default function Settings() {
             console.log('Upload success:', res.data);
             fetchPdfs();
         } catch (err: any) {
-            console.error('Upload error details:', err);
-            let msg = err.response?.data?.detail || err.message || 'Unknown error';
-            if (typeof msg !== 'string') {
-                msg = JSON.stringify(msg);
+            console.error('Detailed Upload Error:', err);
+
+            let errorMessage = 'エラーが発生しました';
+
+            if (err.response) {
+                // Server responded with a status code outside of 2xx
+                const status = err.response.status;
+                const detail = err.response.data?.detail;
+                const detailStr = typeof detail === 'string' ? detail : JSON.stringify(detail);
+                errorMessage = `Server Error (${status}): ${detailStr || 'No detail'}`;
+            } else if (err.request) {
+                // Request was made but no response received
+                errorMessage = `Network Error: サーバーから応答がありません。URLを確認してください。(${err.message})`;
+            } else {
+                // Something else happened in setting up the request
+                errorMessage = `Request Error: ${err.message}`;
             }
-            alert(`Upload failed: ${msg}`);
+
+            alert(`アップロード失敗:\n${errorMessage}`);
         } finally {
             setUploading(false);
             // Reset input
