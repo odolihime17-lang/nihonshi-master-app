@@ -168,27 +168,24 @@ def get_stats(user_id: str = "anonymous") -> dict:
 
 def save_pdf(user_id: str, file_name: str, pdf_text: str) -> None:
     """Save PDF text to Supabase."""
-    try:
-        client = _get_client()
-        existing = (
-            client.table("saved_pdfs")
-            .select("id")
-            .eq("user_id", user_id)
-            .eq("file_name", file_name)
-            .limit(1)
-            .execute()
-        )
-        if existing.data:
-            return
-        client.table("saved_pdfs").insert({
-            "user_id": user_id,
-            "file_name": file_name,
-            "pdf_text": pdf_text,
-            "char_count": len(pdf_text),
-            "created_at": datetime.now().isoformat(),
-        }).execute()
-    except Exception as e:
-        print(f"[db.py] save_pdf error: {e}")
+    client = _get_client()
+    existing = (
+        client.table("saved_pdfs")
+        .select("id")
+        .eq("user_id", user_id)
+        .eq("file_name", file_name)
+        .limit(1)
+        .execute()
+    )
+    if existing.data:
+        return
+    client.table("saved_pdfs").insert({
+        "user_id": user_id,
+        "file_name": file_name,
+        "pdf_text": pdf_text,
+        "char_count": len(pdf_text),
+        "created_at": datetime.now().isoformat(),
+    }).execute()
 
 def get_saved_pdfs(user_id: str = "anonymous") -> list[dict]:
     """Return list of saved PDFs."""

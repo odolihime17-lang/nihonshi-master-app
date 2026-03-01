@@ -1,6 +1,7 @@
 import axios from 'axios';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+console.log('API_BASE_URL:', API_BASE_URL);
 
 const api = axios.create({
     baseURL: API_BASE_URL,
@@ -77,7 +78,8 @@ export const pdfApi = {
         const formData = new FormData();
         formData.append('file', file);
         return api.post(`/pdf/upload/${userId}`, formData, {
-            headers: { 'Content-Type': 'multipart/form-data' },
+            // Do NOT set Content-Type header manually for FormData. 
+            // Axios will handle it including the boundary.
         });
     },
     uploadDrive: (userId: string, url: string) => api.post('/pdf/upload-drive', { user_id: userId, url }),

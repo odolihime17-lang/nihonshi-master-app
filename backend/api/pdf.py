@@ -19,6 +19,8 @@ async def upload_pdf(user_id: str, file: UploadFile = File(...)):
         db.save_pdf(user_id, file.filename, text)
         return {"status": "success", "filename": file.filename}
     except Exception as e:
+        import traceback
+        traceback.print_exc()  # Print full traceback to server logs
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/upload-drive")

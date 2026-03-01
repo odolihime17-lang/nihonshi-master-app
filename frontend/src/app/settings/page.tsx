@@ -36,13 +36,19 @@ export default function Settings() {
         if (!file || !userId) return;
 
         setUploading(true);
+        console.log('Uploading file:', file.name, 'size:', file.size);
         try {
-            await pdfApi.upload(userId, file);
+            const res = await pdfApi.upload(userId, file);
+            console.log('Upload success:', res.data);
             fetchPdfs();
-        } catch (err) {
-            alert('Upload failed');
+        } catch (err: any) {
+            console.error('Upload error details:', err);
+            const msg = err.response?.data?.detail || err.message || 'Unknown error';
+            alert(`Upload failed: ${msg}`);
         } finally {
             setUploading(false);
+            // Reset input
+            e.target.value = '';
         }
     };
 
