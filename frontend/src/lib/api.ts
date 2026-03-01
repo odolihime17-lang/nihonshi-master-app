@@ -7,7 +7,7 @@ console.log('DEBUG: Lib/API Version: 3');
 const api = axios.create({
     baseURL: API_BASE_URL,
     headers: {
-        'Content-Type': 'application/json',
+        // Remove default Content-Type to allow Axios to handle it automatically for FormData
     },
 });
 
