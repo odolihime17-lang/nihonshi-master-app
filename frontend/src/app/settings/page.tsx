@@ -36,6 +36,15 @@ export default function Settings() {
         const file = e.target.files?.[0];
         if (!file || !userId) return;
 
+        // Vercel serverless functions have a 4.5MB request body limit.
+        // We enforce 4MB to stay safely under the limit.
+        const MAX_SIZE_MB = 4;
+        if (file.size > MAX_SIZE_MB * 1024 * 1024) {
+            alert(`ファイルサイズが大きすぎます。\n${MAX_SIZE_MB}MB以下のPDFをアップロードしてください。\n（現在のファイルサイズ: ${(file.size / 1024 / 1024).toFixed(1)}MB）`);
+            e.target.value = '';
+            return;
+        }
+
         setUploading(true);
         console.log('Uploading file:', file.name, 'size:', file.size);
         try {
@@ -195,7 +204,7 @@ export default function Settings() {
                         </div>
                         <div className="flex-1 text-left">
                             <p className="font-bold text-slate-800 dark:text-slate-100">PDF をアップロード</p>
-                            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium tracking-tight">学校のプリントや資料 (各10MB以下)</p>
+                            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium tracking-tight">学校のプリントや資料 (4MB以下)</p>
                         </div>
                         <input type="file" className="hidden" accept=".pdf" onChange={handleFileUpload} />
                     </label>
