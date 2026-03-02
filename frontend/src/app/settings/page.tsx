@@ -101,31 +101,6 @@ export default function Settings() {
         }
     };
 
-    const [apiUrl, setApiUrl] = useState('');
-    useEffect(() => {
-        if (typeof window !== 'undefined') {
-            const current = localStorage.getItem('NEXT_PUBLIC_API_URL_OVERRIDE') || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-            setApiUrl(current);
-        }
-    }, []);
-
-    const updateBaseUrl = () => {
-        import('@/lib/api').then(m => {
-            m.updateApiBaseUrl(apiUrl);
-            alert('API URLを更新しました');
-            fetchPdfs();
-        });
-    };
-
-    const resetBaseUrl = () => {
-        import('@/lib/api').then(m => {
-            m.resetApiBaseUrl();
-            const original = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-            setApiUrl(original);
-            alert('API URLを初期化しました');
-            fetchPdfs();
-        });
-    };
 
     if (userLoading) return (
         <div className="min-h-screen flex items-center justify-center">
@@ -140,36 +115,6 @@ export default function Settings() {
                 <p className="text-slate-500 dark:text-indigo-300 font-bold uppercase tracking-[0.15em] text-[10px] mt-2 font-outfit">Learning Materials</p>
             </header>
 
-            {/* API Configuration */}
-            <section className="mb-8">
-                <h3 className="text-sm font-black uppercase text-indigo-500 tracking-widest mb-3 px-1">API 接続設定</h3>
-                <Card className="p-5">
-                    <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-widest mb-2">サーバーのURL (スマホから接続する場合に変更)</p>
-                    <div className="flex gap-2 mb-3">
-                        <input
-                            type="text"
-                            placeholder="http://192.168.x.x:8000"
-                            value={apiUrl}
-                            onChange={(e) => setApiUrl(e.target.value)}
-                            className="flex-1 bg-slate-100 dark:bg-slate-900 border-none rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500 transition-all outline-none text-slate-800 dark:text-slate-100 font-mono"
-                        />
-                    </div>
-                    <div className="flex gap-2">
-                        <button
-                            onClick={updateBaseUrl}
-                            className="flex-1 bg-indigo-600 text-white font-bold py-2 rounded-xl text-xs active:scale-95 transition-transform"
-                        >
-                            保存して更新
-                        </button>
-                        <button
-                            onClick={resetBaseUrl}
-                            className="px-4 bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold py-2 rounded-xl text-xs active:scale-95 transition-transform"
-                        >
-                            初期化
-                        </button>
-                    </div>
-                </Card>
-            </section>
 
             {/* Appearance Section */}
             <section className="mb-8">
