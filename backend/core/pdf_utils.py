@@ -1,19 +1,22 @@
 """
-backend/core/pdf_utils.py — PDF text extraction using PyMuPDF.
+backend/core/pdf_utils.py — PDF text extraction using pypdf.
 Supports both file bytes and Google Drive URL.
 """
 
 from __future__ import annotations
 
+import io
 import re
-import fitz  # PyMuPDF
 import requests
+from pypdf import PdfReader
+
 
 def extract_text_from_pdf(pdf_bytes: bytes, max_pages: int = 30) -> str:
     """
     Extract text from PDF bytes.
     """
     return _extract_text_from_bytes(pdf_bytes, max_pages)
+
 
 def extract_text_from_drive_url(url: str, max_pages: int = 30) -> str:
     """
@@ -48,24 +51,26 @@ def extract_text_from_drive_url(url: str, max_pages: int = 30) -> str:
 
     return _extract_text_from_bytes(pdf_bytes, max_pages)
 
+
 def _extract_drive_file_id(url: str) -> str | None:
     match = re.search(r'/file/d/([a-zA-Z0-9_-]+)', url)
-    if match: return match.group(1)
+    if match:
+        return match.group(1)
     match = re.search(r'[?&]id=([a-zA-Z0-9_-]+)', url)
-    if match: return match.group(1)
+    if match:
+        return match.group(1)
     return None
 
+
 def _extract_text_from_bytes(pdf_bytes: bytes, max_pages: int = 30) -> str:
-    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-    total_pages = len(doc)
+    reader = PdfReader(io.BytesIO(pdf_bytes))
+    total_pages = len(reader.pages)
     pages_to_read = min(total_pages, max_pages)
     pages_text: list[str] = []
     for page_num in range(pages_to_read):
-        page = doc[page_num]
-        text = page.get_text()
+        text = reader.pages[page_num].extract_text() or ""
         if text.strip():
             pages_text.append(f"--- ページ {page_num + 1} ---\n{text}")
-    doc.close()
     if total_pages > max_pages:
         pages_text.append(f"\n(※ {total_pages}ページ中、最初の{max_pages}ページのみ抽出)")
     return "\n\n".join(pages_text)
