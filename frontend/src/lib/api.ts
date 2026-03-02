@@ -1,8 +1,16 @@
 import axios from 'axios';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const getApiBaseUrl = () => {
+    if (typeof window !== 'undefined') {
+        const override = localStorage.getItem('NEXT_PUBLIC_API_URL_OVERRIDE');
+        if (override) return override;
+    }
+    return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+};
+
+const API_BASE_URL = getApiBaseUrl();
 console.log('DEBUG: API_BASE_URL:', API_BASE_URL);
-console.log('DEBUG: Lib/API Version: 3');
+console.log('DEBUG: Lib/API Version: 4');
 
 const api = axios.create({
     baseURL: API_BASE_URL,
@@ -10,6 +18,21 @@ const api = axios.create({
         // Remove default Content-Type to allow Axios to handle it automatically for FormData
     },
 });
+
+// Helper to update the base URL dynamically if needed
+export const updateApiBaseUrl = (newUrl: string) => {
+    api.defaults.baseURL = newUrl;
+    if (typeof window !== 'undefined') {
+        localStorage.setItem('NEXT_PUBLIC_API_URL_OVERRIDE', newUrl);
+    }
+};
+
+export const resetApiBaseUrl = () => {
+    if (typeof window !== 'undefined') {
+        localStorage.removeItem('NEXT_PUBLIC_API_URL_OVERRIDE');
+    }
+    api.defaults.baseURL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+};
 
 export interface QuizQuestion {
     question?: string;
